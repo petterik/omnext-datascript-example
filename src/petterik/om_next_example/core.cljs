@@ -75,7 +75,7 @@
           :interest
           {:person/_likes (om/get-query Person)}])
   static om/Ident
-  (ident [this {:key [interest]}]
+  (ident [this {:keys [interest]}]
          [:interest interest])
   Object
   (render [this]
