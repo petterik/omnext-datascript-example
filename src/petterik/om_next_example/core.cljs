@@ -57,7 +57,8 @@
 
 (declare RootView)
 
-;; Person component, defining what data it needs from a person
+;; Person component. Defining what data it needs with IQuery. Plugs directly into
+;; datascript's (datomic's) pull syntax.
 (defui Person
   static om/IQuery
   (query [this]
