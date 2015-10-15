@@ -2,7 +2,8 @@
 An example of how I use datascript with om.next (alpha1)
 
 ## Status
-It's not much more than the datascript integration page on omcljs/om's wiki.
+Has a bit more stuff than the datascript integration page on omcljs/om's wiki.
+Currently not very DRY (code duplication).
 
 I may include more stuff as I spend more time with both om and datascript.
 
@@ -10,6 +11,7 @@ I may include more stuff as I spend more time with both om and datascript.
 
 - Nesting components
 - Updating entities
+- Different controls for the same data
 
 ## Usage
 Run: `lein run -m clojure.main script/figwheel.clj`
