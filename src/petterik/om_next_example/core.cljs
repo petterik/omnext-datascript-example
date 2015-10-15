@@ -32,8 +32,8 @@
 
 
 (defmethod read :app/list-interests 
-  "list all intersts and use the selector to pull the data the components need.
-  The selector is defined by each component's IQuery"
+  ;; list all intersts and use the selector to pull the data the components need.
+  ;; The selector is defined by each component's IQuery 
   [{:keys [state selector]} _ _] 
   {:value (d/q '[:find [(pull ?interest ?selector) ...]
                  :in $ ?selector
@@ -42,13 +42,13 @@
                selector)})
 
 (defmethod mutate 'person/dislike 
-  "Dislike an interest given an entity"
+  ;; Dislike an interest given an entity
   [{:keys [state]} _ {:keys [entity interest] :as p}]
   {:action #(d/transact! state [[:db/retract (:db/id entity) 
                                  :person/likes [:interest interest]]])})
 
 (defmethod mutate 'person/make-bold 
-  "Make something bold. Note: update-in takes an entity map, not an entity id for some reason."
+;;  Make something bold. Note: update-in takes an entity map, not an entity id for some reason.
   [{:keys [state]} _ {:keys [entity]}]
   {:action #(d/transact! state [(update-in entity [:ui.person/bold] not)])})
 
