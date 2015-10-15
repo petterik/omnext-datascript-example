@@ -5,6 +5,7 @@
             [om.dom :as dom]
             [datascript.core :as d]))
 
+;; First define some schema and data.
 (def schema {:person/likes {:db/valueType :db.type/ref
                             :db/cardinality :db.cardinality/many}
              :db/id        {:db/unique :db.unique/identity}
@@ -18,27 +19,37 @@
                 {:person/name "David"  :person/twitter "@swannodette" :person/likes [-1 -2]}
                 {:app :state :app/interest :clojurescript}])
 
+;; mutate and read functions for om.next's parser
 (defmulti mutate om/dispatch)
 (defmulti read om/dispatch)
 
 (defmethod read :default
   [{:keys [state selector] :as env} key params]
-  ;; Will be called sometimes, but just returning nil seems to work?...
-  ;; Why is it called?
+  ;; TODO: Figure out why this is called sometimes on my Person's IQuery.
+  ;; We don't have enough context to do anything, so we're just returning nil.
+  ;; Is this the right thing to do? Why is it called?
   )
 
-(defmethod read :app/list-interests [{:keys [state selector]} _ _] 
+
+(defmethod read :app/list-interests 
+  "list all intersts and use the selector to pull the data the components need.
+  The selector is defined by each component's IQuery"
+  [{:keys [state selector]} _ _] 
   {:value (d/q '[:find [(pull ?interest ?selector) ...]
                  :in $ ?selector
                  :where [?interest :interest]]
                (d/db state)
                selector)})
 
-(defmethod mutate 'person/dislike [{:keys [state]} _ {:keys [entity interest] :as p}]
+(defmethod mutate 'person/dislike 
+  "Dislike an interest given an entity"
+  [{:keys [state]} _ {:keys [entity interest] :as p}]
   {:action #(d/transact! state [[:db/retract (:db/id entity) 
                                  :person/likes [:interest interest]]])})
 
-(defmethod mutate 'person/make-bold [{:keys [state]} _ {:keys [entity]}]
+(defmethod mutate 'person/make-bold 
+  "Make something bold. Note: update-in takes an entity map, not an entity id for some reason."
+  [{:keys [state]} _ {:keys [entity]}]
   {:action #(d/transact! state [(update-in entity [:ui.person/bold] not)])})
 
 (defn button [this text transaction]
@@ -46,6 +57,7 @@
 
 (declare RootView)
 
+;; Person component, defining what data it needs from a person
 (defui Person
   static om/IQuery
   (query [this]
@@ -103,7 +115,10 @@
           (html [:div (map interested-people
                            (:app/list-interests (om/props this)))])))
 
-(defn init-app []
+(defn init-app 
+  "Create a connection with schema, init the parser, reconciler, transact some data and
+  add the app to the dom."
+  []
   (let [conn       (d/create-conn schema)
         parser     (om/parser {:read read :mutate mutate})
         reconciler (om/reconciler {:state conn :parser parser})]
@@ -111,5 +126,5 @@
     (om/add-root! reconciler RootView (gdom/getElement "app"))))
 
 (enable-console-print!)
-(init-app)
+(init-app) ;; run the thing
 
