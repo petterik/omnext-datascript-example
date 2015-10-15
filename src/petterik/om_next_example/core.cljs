@@ -146,23 +146,33 @@
 (defui PeopleView
   static om/IQuery
   (query [this] [{:app/list-people [:db/id :person/name {:person/likes [:interest]}]}
-                 {:app/list-interests-2 [:interest]}])
+                 {:app/list-interests [:interest]}])
   Object
   (render [this]
           (let [props (om/props this)
-                interests (:app/list-interests props)
+                interests (->> (:app/list-interests props) (map :interest))
                 people (->> (:app/list-people props)
-                            (map (fn [p] (->> (:person/likes p)
-                                              (map :interest)
-                                              (into #{})))))
-                ]
-            (prn (for [person   people
-                         interest interests]
-                     (if (contains? (:person/likes person) interest)
-                       "Y" "N")))
-          (html 
-            [:div "HEJ"
-             ]))))
+                            (map #(update % :person/likes 
+                                          (partial into #{} (map :interest)))))
+                checkboxes (for [person   people
+                                 interest interests]
+                             [:input (merge {:type "checkbox"
+                                             :on-click 
+                                             #(prn {:person person :interest interest})}
+                                            (if (contains? (:person/likes person) interest)
+                                              {:checked "checked"}
+                                              {}))])
+                boxes-by-interest (partition (count people) checkboxes)]
+            (html 
+              [:div
+              [:table
+               [:tr
+                [:td] (map #(vector :td (:person/name %)) people)]
+               (map (fn [interest boxes] [:tr 
+                                          [:td (name interest)]
+                                          (map #(vector :td %) boxes)])
+                    interests
+                    boxes-by-interest)]]))))
 
 (def people-view (om/factory PeopleView))
 
