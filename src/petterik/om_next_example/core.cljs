@@ -15,8 +15,8 @@
 
 (def init-data [{:db/id -1 :interest :clojurescript}
                 {:db/id -2 :interest :music}
-                {:person/name "Petter" :person/twitter "@ipetterik_"  :person/likes [-1 -2]}
-                {:person/name "David"  :person/twitter "@swannodette" :person/likes [-1 -2]}
+                {:person/name "Petter" :person/twitter "@ipetterik_" :person/likes [-1 -2]}
+                {:person/name "Diana"  :person/twitter "@dianagren"  :person/likes [-1 -2]}
                 {:app :state :app/interest :clojurescript}])
 
 ;; mutate and read functions for om.next's parser
@@ -48,11 +48,11 @@
   [{:keys [state selector]} _ _] 
   {:value (entities-with-attr :interest (d/db state) selector)})
 
-(defmethod read :app/list-interests-2
+(comment (defmethod read :app/list-interests
   ;; list all intersts and use the selector to pull the data the components need.
   ;; The selector is defined by each component's IQuery 
   [{:keys [state selector]} _ _] 
-  {:value (entities-with-attr :interest (d/db state) selector)})
+  {:value (entities-with-attr :interest (d/db state) selector)}))
 
 (defmethod read :app/parse-interested
   [{:keys [parser selector] :as env} _ _]
@@ -61,6 +61,12 @@
 (defmethod read :app/parse-people
   [{:keys [parser selector] :as env} _ _]
   {:value (parser (assoc env :selector nil) selector)})
+
+(defmethod mutate 'person/like
+  ;; Dislike an interest given an entity
+  [{:keys [state]} _ {:keys [entity interest] :as p}]
+  {:action #(d/transact! state [[:db/add (:db/id entity) 
+                                 :person/likes [:interest interest]]])})
 
 (defmethod mutate 'person/dislike 
   ;; Dislike an interest given an entity
@@ -154,14 +160,21 @@
                 people (->> (:app/list-people props)
                             (map #(update % :person/likes 
                                           (partial into #{} (map :interest)))))
-                checkboxes (for [person   people
-                                 interest interests]
-                             [:input (merge {:type "checkbox"
-                                             :on-click 
-                                             #(prn {:person person :interest interest})}
-                                            (if (contains? (:person/likes person) interest)
-                                              {:checked "checked"}
-                                              {}))])
+                checkboxes (for [interest interests
+                                 person   people]
+                             (let [likes? (contains? (:person/likes person) interest)
+                                   update-fn (if likes? 'person/dislike 'person/like)]
+                               [:input (merge {:type "checkbox"
+                                               :on-click 
+                                               #(om/transact!
+                                                  this
+                                                  [`(~update-fn {:entity ~person 
+                                                                 :interest ~interest})
+                                                   (first (om/get-query RootView))
+                                                   (second (om/get-query RootView))])}
+                                              (if likes? 
+                                                {:checked "checked"}
+                                                {}))]))
                 boxes-by-interest (partition (count people) checkboxes)]
             (html 
               [:div
