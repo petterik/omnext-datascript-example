@@ -151,7 +151,8 @@
 
 (defui PeopleView
   static om/IQuery
-  (query [this] [{:app/list-people [:db/id :person/name {:person/likes [:interest]}]}
+  (query [this] [{:app/list-people [:db/id :person/name {:person/likes [:interest]}
+                                    :ui.person/bold]}
                  {:app/list-interests [:interest]}])
   Object
   (render [this]
@@ -180,7 +181,10 @@
               [:div
               [:table
                [:tr
-                [:td] (map #(vector :td (:person/name %)) people)]
+                [:td] (map #(vector :td 
+                                    {:style #js {:fontWeight 
+                                                 (if (:ui.person/bold %) "bold" "normal")}} 
+                                    (:person/name %)) people)]
                (map (fn [interest boxes] [:tr 
                                           [:td (name interest)]
                                           (map #(vector :td %) boxes)])
