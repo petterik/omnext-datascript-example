@@ -179,6 +179,7 @@
                 boxes-by-interest (partition (count people) checkboxes)]
             (html 
               [:div
+               [:h2 "Like controls:"]
               [:table
                [:tr
                 [:td] (map #(vector :td 
