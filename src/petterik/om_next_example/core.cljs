@@ -22,12 +22,10 @@
 (defmulti read om/dispatch)
 
 (defmethod read :default
-  [{:keys [state component selector] :as env} key params]
-  (prn (om/props component))
-  (let [sel (if selector {key selector} key)]
-    {:value (or (-> (d/pull (d/db state) [sel] (om/ident component (om/props component)))
-                    (get key))
-                (get (om/props component) key))}))
+  [{:keys [state selector] :as env} key params]
+  ;; Will be called sometimes, but just returning nil seems to work?...
+  ;; Why is it called?
+  )
 
 (defmethod read :app/list-interests [{:keys [state selector]} _ _] 
   {:value (d/q '[:find [(pull ?interest ?selector) ...]
@@ -36,74 +34,81 @@
                (d/db state)
                selector)})
 
-(defmethod mutate 'person/dislike [{:keys [state]} _ {:keys [entity interest]}]
-  {:value [:interest :person/likes]
-   :action 
-   #(let [res (d/transact! state [[:db/retract (:db/id entity) 
-                                   :person/likes [:interest interest]]])]
-      res)})
+(defmethod mutate 'person/dislike [{:keys [state]} _ {:keys [entity interest] :as p}]
+  {:action #(d/transact! state [[:db/retract (:db/id entity) 
+                                 :person/likes [:interest interest]]])})
+
+(defmethod mutate 'person/make-bold [{:keys [state]} _ {:keys [entity]}]
+  {:action #(d/transact! state [(update-in entity [:ui.person/bold] not)])})
+
+(defn button [this text transaction]
+  [:button {:on-click #(om/transact! this transaction)} text])
+
+(declare RootView)
 
 (defui Person
-  static om/Ident
-  (ident [this {:keys [person/name]}]
-         [:person/name name])
   static om/IQuery
   (query [this]
-         [:db/id 
-          :person/name 
-          :person/twitter 
-          {:person/likes [:interest]}])
+         [:db/id :ui.person/bold
+          :person/name :person/twitter {:person/likes [:interest]}])
   Object
   (render [this]
-          (let [{:keys [like
-                        person/name person/twitter 
-                        person/likes] :as entity} (om/props this)]
-            (prn {:person name :person-likes like})
+          (let [{:keys [person/name
+                        person/twitter
+                        person/likes
+                        ui.person/bold
+                        like] :as entity} (om/props this)
+                root-query (first (om/get-query RootView))]
+            (prn "Rendering person: " {:name name :who-like like})
             (html [:div 
-                   [:p (str twitter)]
-                   [:button {:on-click 
-                             #(om/transact! this `[(person/dislike {:entity ~entity
-                                                                    :interest ~like})])}
-                    "dislike"]]))))
+                   [:p 
+                    {:style #js {:fontWeight (if bold "bold" "normal")}} 
+                    (str twitter)]
+                   (button this "dislike"
+                           [`(person/dislike {:entity ~entity :interest ~like}) root-query])
+                   (button this (if bold "normal" "bold")
+                                  [`(person/make-bold {:entity ~entity}) 
+                                   ;; Note: We cannot just re-read the Person's IQuery. It
+                                   ;; needs to be used in a pull syntax. We need to re-read
+                                   ;; the :app/list-interests key with all of it's dependencies.
+                                   ;; Om will do a good job of just rendering the entities
+                                   ;; which need re-rendering. Same thing goes for the dislike
+                                   ;; button.
+                                   root-query])]))))
 
 (def person (om/factory Person {:keyfn :person/name}))
 
 (defui InterestedPeople
   static om/IQuery
   (query [this]
-         [:db/id 
-          :interest
-          {:person/_likes (om/get-query Person)}])
-  static om/Ident
-  (ident [this {:keys [interest]}]
-         [:interest interest])
+         [:db/id :interest {:person/_likes (om/get-query Person)}])
   Object
   (render [this]
           (let [{:keys [db/id interest person/_likes]} (om/props this)]
+            (prn "Rendering People interested in: " (name interest))
             (html
               [:div [:h2 (str "People who like " (name interest) ":")]
-                    [:div (map #(person (assoc % :like interest)) _likes)]]))))
+               (when _likes
+                 ;; We can pass data to the person from it's parent.
+                 [:div (map #(person (assoc % :like interest)) _likes)])]))))
 
-(def interested-people (om/factory InterestedPeople))
+(def interested-people (om/factory InterestedPeople {:keyfn :interest}))
 
 (defui RootView
   static om/IQuery
-  (query [this]
-         [{:app/list-interests (om/get-query InterestedPeople)}])
+  (query [this] [{:app/list-interests (om/get-query InterestedPeople)}])
   Object
   (render [this]
-          (let [{:keys [app/list-interests]} (om/props this)]
-            (html
-              [:div (map interested-people list-interests)]))))
-
+          (prn "Rendering RootView")
+          (html [:div (map interested-people
+                           (:app/list-interests (om/props this)))])))
 
 (defn init-app []
-  (prn "init")
-  (let [conn       (d/create-conn schema) 
-        parser     (om/parser {:read read :mutate mutate}) 
-        reconciler (om/reconciler {:state conn :parser parser})] 
-      (d/transact conn init-data)
-      (om/add-root! reconciler RootView (gdom/getElement "app"))))
+  (let [conn       (d/create-conn schema)
+        parser     (om/parser {:read read :mutate mutate})
+        reconciler (om/reconciler {:state conn :parser parser})]
+    (d/transact conn init-data)
+    (om/add-root! reconciler RootView (gdom/getElement "app"))))
 
 (enable-console-print!)
 (init-app)
