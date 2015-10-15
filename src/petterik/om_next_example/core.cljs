@@ -55,7 +55,7 @@
 (defn button [this text transaction]
   [:button {:on-click #(om/transact! this transaction)} text])
 
-(declare RootView)
+(declare InterestsView)
 
 ;; Person component. Defining what data it needs with IQuery. Plugs directly into
 ;; datascript's (datomic's) pull syntax.
@@ -71,23 +71,25 @@
                         person/likes
                         ui.person/bold
                         like] :as entity} (om/props this)
-                root-query (first (om/get-query RootView))]
+                root-query (first (om/get-query InterestsView))]
             (prn "Rendering person: " {:name name :who-like like})
-            (html [:div 
-                   [:p 
-                    {:style #js {:fontWeight (if bold "bold" "normal")}} 
-                    (str twitter)]
-                   (button this "dislike"
-                           [`(person/dislike {:entity ~entity :interest ~like}) root-query])
-                   (button this (if bold "normal" "bold")
-                                  [`(person/make-bold {:entity ~entity}) 
-                                   ;; Note: We cannot just re-read the Person's IQuery. It
-                                   ;; needs to be used in a pull syntax. We need to re-read
-                                   ;; the :app/list-interests key with all of it's dependencies.
-                                   ;; Om will do a good job of just rendering the entities
-                                   ;; which need re-rendering. Same thing goes for the dislike
-                                   ;; button.
-                                   root-query])]))))
+            (html 
+              [:div {:style #js {:display "inline-block" :margin "0.5em"}}
+               [:span 
+                {:style #js {:fontWeight (if bold "bold" "normal")}} 
+                (str twitter)]
+               [:div 
+                (button this "dislike"
+                        [`(person/dislike {:entity ~entity :interest ~like}) root-query])
+                (button this (if bold "normal" "bold")
+                        [`(person/make-bold {:entity ~entity}) 
+                         ;; Note: We cannot just re-read the Person's IQuery. It
+                         ;; needs to be used in a pull syntax. We need to re-read
+                         ;; the :app/list-interests key with all of it's dependencies.
+                         ;; Om will do a good job of just rendering the entities
+                         ;; which need re-rendering. Same thing goes for the dislike
+                         ;; button.
+                         root-query])]]))))
 
 (def person (om/factory Person {:keyfn :person/name}))
 
@@ -103,11 +105,12 @@
               [:div [:h2 (str "People who like " (name interest) ":")]
                (when _likes
                  ;; We can pass data to the person from it's parent.
-                 [:div (map #(person (assoc % :like interest)) _likes)])]))))
+                 [:div  {:style #js {:display "inline-block"}}
+                  (map #(person (assoc % :like interest)) _likes)])]))))
 
 (def interested-people (om/factory InterestedPeople {:keyfn :interest}))
 
-(defui RootView
+(defui InterestsView
   static om/IQuery
   (query [this] [{:app/list-interests (om/get-query InterestedPeople)}])
   Object
@@ -124,7 +127,7 @@
         parser     (om/parser {:read read :mutate mutate})
         reconciler (om/reconciler {:state conn :parser parser})]
     (d/transact conn init-data)
-    (om/add-root! reconciler RootView (gdom/getElement "app"))))
+    (om/add-root! reconciler InterestsView (gdom/getElement "app"))))
 
 (enable-console-print!)
 (init-app) ;; run the thing
