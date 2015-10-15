@@ -30,16 +30,23 @@
   ;; Is this the right thing to do? Why is it called?
   )
 
+(defn entities-with-attr [attr db selector]
+  (d/q '[:find [(pull ?e ?selector) ...]
+         :in $ ?attr ?selector
+         :where [?e ?attr]]
+       db
+       attr  
+       selector))
 
-(defmethod read :app/list-interests 
+(defmethod read :app/list-people
+  [{:keys [state selector]} _ _] 
+  {:value (entities-with-attr :person/name (d/db state) selector)})
+
+(defmethod read :app/list-interests
   ;; list all intersts and use the selector to pull the data the components need.
   ;; The selector is defined by each component's IQuery 
   [{:keys [state selector]} _ _] 
-  {:value (d/q '[:find [(pull ?interest ?selector) ...]
-                 :in $ ?selector
-                 :where [?interest :interest]]
-               (d/db state)
-               selector)})
+  {:value (entities-with-attr :interest (d/db state) selector)})
 
 (defmethod mutate 'person/dislike 
   ;; Dislike an interest given an entity
@@ -115,9 +122,20 @@
   (query [this] [{:app/list-interests (om/get-query InterestedPeople)}])
   Object
   (render [this]
-          (prn "Rendering RootView")
+          (prn "Rendering InterestsView: " (om/props this))
           (html [:div (map interested-people
                            (:app/list-interests (om/props this)))])))
+
+(defui PeopleView
+  static om/IQuery
+  (query [this] [{:app/list-people [:db/id :person/name :person/likes]}
+                 {:app/list-interests [:interest]}])
+  Object
+  (render [this]
+          (let [props (om/props this)
+                {:keys [db/id person/name person/likes]} (:app/list-people props)
+                {:keys [:interest]} (:app/list-interests props)])
+          (html [:div "HEJ"])))
 
 (defn init-app 
   "Create a connection with schema, init the parser, reconciler, transact some data and
@@ -127,7 +145,8 @@
         parser     (om/parser {:read read :mutate mutate})
         reconciler (om/reconciler {:state conn :parser parser})]
     (d/transact conn init-data)
-    (om/add-root! reconciler InterestsView (gdom/getElement "app"))))
+    (om/add-root! reconciler InterestsView (gdom/getElement "interests"))
+    (om/add-root! reconciler PeopleView (gdom/getElement "people"))))
 
 (enable-console-print!)
 (init-app) ;; run the thing
