@@ -48,12 +48,6 @@
   [{:keys [state selector]} _ _] 
   {:value (entities-with-attr :interest (d/db state) selector)})
 
-(comment (defmethod read :app/list-interests
-  ;; list all intersts and use the selector to pull the data the components need.
-  ;; The selector is defined by each component's IQuery 
-  [{:keys [state selector]} _ _] 
-  {:value (entities-with-attr :interest (d/db state) selector)}))
-
 (defmethod read :app/parse-interested
   [{:keys [parser selector] :as env} _ _]
   {:value (parser (assoc env :selector nil) selector)})
@@ -78,6 +72,13 @@
 ;;  Make something bold. Note: update-in takes an entity map, not an entity id for some reason.
   [{:keys [state]} _ {:keys [entity]}]
   {:action #(d/transact! state [(update-in entity [:ui.person/bold] not)])})
+
+(defn tx-with-deps 
+  "takes a transaction and appends dependencies' (components') queries"
+  [transaction & dependencies]
+  (vec (apply concat 
+              transaction
+              (map om/get-query dependencies))))
 
 (defn button [this text transaction]
   [:button {:on-click #(om/transact! this transaction)} text])
@@ -124,16 +125,16 @@
 (defui InterestedPeople
   static om/IQuery
   (query [this]
-         [:db/id :interest {:person/_likes (om/get-query Person)}])
+         [:interest {:person/_likes (om/get-query Person)}])
   Object
   (render [this]
-          (let [{:keys [db/id interest person/_likes]} (om/props this)]
+          (let [{:keys [interest person/_likes]} (om/props this)]
             (prn "Rendering People interested in: " (name interest))
             (html
               [:div [:h2 (str "People who like " (name interest) ":")]
                (when _likes
                  ;; We can pass data to the person from it's parent.
-                 [:div  {:style #js {:display "inline-block"}}
+                 [:div {:style #js {:display "inline-block"}}
                   (map #(person (assoc % :like interest)) _likes)])]))))
 
 (def interested-people (om/factory InterestedPeople {:keyfn :interest}))
@@ -149,6 +150,19 @@
 
 (def interests-view (om/factory InterestsView))
 
+(defn like-control [this person interest]
+  (let [likes? (contains? (:person/likes person) interest)
+        update-fn (if likes? 'person/dislike 'person/like)]
+    [:input (merge 
+              {:type "checkbox"
+               :on-click #(om/transact! this 
+                                        (tx-with-deps
+                                          `[(~update-fn {:entity ~person :interest ~interest})]
+                                          RootView))}
+              (if likes? 
+                {:checked "checked"}
+                {}))]))
+
 (defui PeopleView
   static om/IQuery
   (query [this] [{:app/list-people [:db/id :person/name {:person/likes [:interest]}
@@ -163,19 +177,7 @@
                                           (partial into #{} (map :interest)))))
                 checkboxes (for [interest interests
                                  person   people]
-                             (let [likes? (contains? (:person/likes person) interest)
-                                   update-fn (if likes? 'person/dislike 'person/like)]
-                               [:input (merge {:type "checkbox"
-                                               :on-click 
-                                               #(om/transact!
-                                                  this
-                                                  [`(~update-fn {:entity ~person 
-                                                                 :interest ~interest})
-                                                   (first (om/get-query RootView))
-                                                   (second (om/get-query RootView))])}
-                                              (if likes? 
-                                                {:checked "checked"}
-                                                {}))]))
+                             (like-control this person interest))
                 boxes-by-interest (partition (count people) checkboxes)]
             (html 
               [:div
