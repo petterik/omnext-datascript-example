@@ -54,6 +54,14 @@
   [{:keys [state selector]} _ _] 
   {:value (entities-with-attr :interest (d/db state) selector)})
 
+(defmethod read :app/parse-interested
+  [{:keys [parser selector] :as env} _ _]
+  {:value (parser (assoc env :selector nil) selector)})
+
+(defmethod read :app/parse-people
+  [{:keys [parser selector] :as env} _ _]
+  {:value (parser (assoc env :selector nil) selector)})
+
 (defmethod mutate 'person/dislike 
   ;; Dislike an interest given an entity
   [{:keys [state]} _ {:keys [entity interest] :as p}]
@@ -69,6 +77,7 @@
   [:button {:on-click #(om/transact! this transaction)} text])
 
 (declare InterestsView)
+(declare RootView)
 
 ;; Person component. Defining what data it needs with IQuery. Plugs directly into
 ;; datascript's (datomic's) pull syntax.
@@ -84,7 +93,7 @@
                         person/likes
                         ui.person/bold
                         like] :as entity} (om/props this)
-                root-query (first (om/get-query InterestsView))]
+                root-query (second (om/get-query RootView))]
             (prn "Rendering person: " {:name name :who-like like})
             (html 
               [:div {:style #js {:display "inline-block" :margin "0.5em"}}
@@ -132,6 +141,8 @@
           (html [:div (map interested-people
                            (:app/list-interests (om/props this)))])))
 
+(def interests-view (om/factory InterestsView))
+
 (defui PeopleView
   static om/IQuery
   (query [this] [{:app/list-people [:db/id :person/name {:person/likes [:interest]}]}
@@ -153,6 +164,20 @@
             [:div "HEJ"
              ]))))
 
+(def people-view (om/factory PeopleView))
+
+(defui RootView
+  static om/IQuery
+  (query [this] [{:app/parse-people (om/get-query PeopleView)}
+                 {:app/parse-interested (om/get-query InterestsView)}])
+  Object
+  (render [this]
+          (let [props (om/props this)
+                pview-data (get props :app/parse-people)
+                iview-data (get props :app/parse-interested)]
+            (html [:div
+                   (people-view pview-data)
+                   (interests-view iview-data)]))))
                ;; {:keys [db/id person/name person/likes]} 
 (defn init-app 
   "Create a connection with schema, init the parser, reconciler, transact some data and
@@ -162,8 +187,7 @@
         parser     (om/parser {:read read :mutate mutate})
         reconciler (om/reconciler {:state conn :parser parser})]
     (d/transact conn init-data)
-    (om/add-root! reconciler InterestsView (gdom/getElement "interests"))
-    (om/add-root! reconciler PeopleView (gdom/getElement "people"))))
+    (om/add-root! reconciler RootView (gdom/getElement "app"))))
 
 (enable-console-print!)
 (init-app) ;; run the thing
