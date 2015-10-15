@@ -48,6 +48,12 @@
   [{:keys [state selector]} _ _] 
   {:value (entities-with-attr :interest (d/db state) selector)})
 
+(defmethod read :app/list-interests-2
+  ;; list all intersts and use the selector to pull the data the components need.
+  ;; The selector is defined by each component's IQuery 
+  [{:keys [state selector]} _ _] 
+  {:value (entities-with-attr :interest (d/db state) selector)})
+
 (defmethod mutate 'person/dislike 
   ;; Dislike an interest given an entity
   [{:keys [state]} _ {:keys [entity interest] :as p}]
@@ -128,15 +134,26 @@
 
 (defui PeopleView
   static om/IQuery
-  (query [this] [{:app/list-people [:db/id :person/name :person/likes]}
-                 {:app/list-interests [:interest]}])
+  (query [this] [{:app/list-people [:db/id :person/name {:person/likes [:interest]}]}
+                 {:app/list-interests-2 [:interest]}])
   Object
   (render [this]
           (let [props (om/props this)
-                {:keys [db/id person/name person/likes]} (:app/list-people props)
-                {:keys [:interest]} (:app/list-interests props)])
-          (html [:div "HEJ"])))
+                interests (:app/list-interests props)
+                people (->> (:app/list-people props)
+                            (map (fn [p] (->> (:person/likes p)
+                                              (map :interest)
+                                              (into #{})))))
+                ]
+            (prn (for [person   people
+                         interest interests]
+                     (if (contains? (:person/likes person) interest)
+                       "Y" "N")))
+          (html 
+            [:div "HEJ"
+             ]))))
 
+               ;; {:keys [db/id person/name person/likes]} 
 (defn init-app 
   "Create a connection with schema, init the parser, reconciler, transact some data and
   add the app to the dom."
